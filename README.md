@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Woo
 
-## Getting Started
+SaaS for planning and sending beautiful date invitations.
 
-First, run the development server:
+**Tagline:** To woo.
+
+## Stack
+
+- Next.js 14 (App Router) + TypeScript
+- Tailwind CSS
+- Supabase (Postgres)
+- Resend (transactional email)
+- Stripe Checkout (Woo Pro subscription)
+- Anthropic (Surprise Date, Pro only)
+
+## Setup
+
+1. **Install**
+
+```bash
+npm install
+cp .env.example .env.local
+```
+
+2. **Supabase** — create a project, then run `supabase/migration.sql` in the SQL editor.
+
+3. **Fill `.env.local`** with your keys (see `.env.example`).
+
+4. **Stripe** — create a product “Woo Pro” at $4.99/mo, copy the Price ID to `STRIPE_PRICE_ID_WOO_PRO`. For local webhooks:
+
+```bash
+stripe listen --forward-to localhost:3000/api/webhooks/stripe
+```
+
+5. **Resend** — add `RESEND_API_KEY`. With `onboarding@resend.dev` you can only send to your own verified email until you verify a domain.
+
+6. **Run**
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Pages
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Route | Purpose |
+|-------|---------|
+| `/` | Marketing landing |
+| `/create` | Step 1 — date, time, plan |
+| `/create/step-2` | Step 2 — recipient + theme + send |
+| `/w/[id]` | Public recipient page |
+| `/success` | Confirmation + share link |
+| `/pricing` | Free vs Woo Pro |
 
-## Learn More
+## Deploy (Vercel)
 
-To learn more about Next.js, take a look at the following resources:
+1. Push the repo and import in Vercel.
+2. Add the same env vars.
+3. Set `NEXT_PUBLIC_APP_URL` to your production URL.
+4. Point Stripe webhook to `https://your-domain/api/webhooks/stripe`.
+5. Optional domains: `woo.co`, `getwoo.com`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Monetization
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- **Free — $0** — 1 Woo / month, 1 theme, "I'll pick" only
+- **Woo+ — $2.99/mo** — 5 Woos / month, 3 themes, "Let them pick" (decoy tier)
+- **Woo Pro — $4.99/mo** — unlimited, all themes, Surprise Date ✨, read receipts
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+After schema changes, run `supabase/migration_plans.sql` if you already applied the initial migration.

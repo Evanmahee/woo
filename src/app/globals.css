@@ -3,25 +3,61 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --color-bg-gradient: linear-gradient(135deg, #EAE0F8 0%, #F7EAE2 55%, #FCEFD9 100%);
+  --color-surface: #FFFFFF;
+  --color-text: #3D1F2B;
+  --color-muted: #8A7A85;
+  --color-accent: #E85D75;
+  --color-accent-soft: #F7DCE3;
+  --radius-base: 24px;
+  --space-unit: 8px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--color-text);
+  background: var(--color-bg-gradient);
+  background-attachment: fixed;
+  min-height: 100vh;
+  font-family: var(--font-outfit), system-ui, sans-serif;
 }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
+@layer components {
+  .woo-card {
+    @apply bg-white rounded-3xl shadow-woo;
   }
+
+  .woo-label {
+    @apply text-xs font-medium tracking-[0.18em] uppercase text-woo-muted;
+  }
+
+  .woo-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-woo-accent px-6 py-3.5
+      text-base font-medium text-white transition hover:bg-[#d94f68]
+      disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .woo-btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl border border-woo-accent/20
+      bg-white px-6 py-3.5 text-base font-medium text-woo-text transition
+      hover:bg-woo-accent-soft;
+  }
+
+  .woo-input {
+    @apply w-full rounded-2xl border border-black/5 bg-white/80 px-4 py-3.5
+      text-woo-text outline-none transition
+      focus:border-woo-accent/40 focus:ring-2 focus:ring-woo-accent/20;
+  }
+
+  .woo-badge-icon {
+    @apply inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-woo-badge text-xl;
+  }
+}
+
+input[type="date"],
+input[type="time"] {
+  color-scheme: light;
 }
