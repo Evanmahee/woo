@@ -7,6 +7,7 @@ import { Logo } from "@/components/ui";
 import {
   PLAN_LIMITS,
   readStoredPlan,
+  writeStoredPlan,
   type PaidTier,
   type PlanTier,
 } from "@/lib/plans";
@@ -35,15 +36,32 @@ const FEATURES = {
 export default function PricingPage() {
   const [userPlan, setUserPlan] = useState<PlanTier>("free");
   const [loadingTier, setLoadingTier] = useState<PaidTier | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [unsubLoading, setUnsubLoading] = useState(false);
+  const [billingEmail, setBillingEmail] = useState("");
+  const [billingMsg, setBillingMsg] = useState("");
+  const [canceledBanner, setCanceledBanner] = useState(false);
 
   useEffect(() => {
     setUserPlan(readStoredPlan());
+    const saved = localStorage.getItem("woo_sender_email");
+    if (saved) setBillingEmail(saved);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("canceled") === "1") {
+      setCanceledBanner(true);
+      writeStoredPlan("free");
+      setUserPlan("free");
+    }
   }, []);
 
   async function checkout(tier: PaidTier) {
     setLoadingTier(tier);
+    setBillingMsg("");
     try {
-      const email = localStorage.getItem("woo_sender_email") || undefined;
+      const email =
+        billingEmail.trim() ||
+        localStorage.getItem("woo_sender_email") ||
+        undefined;
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -51,25 +69,65 @@ export default function PricingPage() {
       });
       const data = await res.json();
       if (data.url) window.location.href = data.url;
+      else setBillingMsg(data.error || "Checkout unavailable");
     } finally {
       setLoadingTier(null);
     }
   }
 
-  async function openPortal() {
-    const email = localStorage.getItem("woo_sender_email");
+  async function openPortal(intent: "manage" | "cancel" = "manage") {
+    const email = billingEmail.trim().toLowerCase();
     if (!email) {
-      window.location.href = "/create";
+      setBillingMsg("Entre l’email utilisé pour le paiement.");
       return;
     }
-    const res = await fetch("/api/portal", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-    const data = await res.json();
-    if (data.url) window.location.href = data.url;
+    setPortalLoading(true);
+    setBillingMsg("");
+    try {
+      localStorage.setItem("woo_sender_email", email);
+      const res = await fetch("/api/portal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, intent }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      setBillingMsg(data.error || "Impossible d’ouvrir le portail Stripe.");
+    } finally {
+      setPortalLoading(false);
+    }
   }
+
+  async function cancelAtPeriodEnd() {
+    const email = billingEmail.trim().toLowerCase();
+    if (!email) {
+      setBillingMsg("Entre l’email utilisé pour le paiement.");
+      return;
+    }
+    setUnsubLoading(true);
+    setBillingMsg("");
+    try {
+      localStorage.setItem("woo_sender_email", email);
+      const res = await fetch("/api/unsubscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setBillingMsg(data.error || "Désabonnement impossible.");
+        return;
+      }
+      setBillingMsg(data.message || "Désabonnement programmé.");
+    } finally {
+      setUnsubLoading(false);
+    }
+  }
+
+  const isPaid = userPlan === "woo_plus" || userPlan === "woo_pro";
 
   return (
     <div className="min-h-screen bg-woo-gradient">
@@ -91,8 +149,14 @@ export default function PricingPage() {
           </p>
         </div>
 
+        {canceledBanner && (
+          <div className="mx-auto mt-6 max-w-xl rounded-2xl border border-woo-accent/20 bg-white/80 px-4 py-3 text-center text-sm text-woo-text">
+            Abonnement mis à jour. Tu es sur Free — tu peux te réabonner quand tu
+            veux.
+          </div>
+        )}
+
         <div className="mt-12 grid items-stretch gap-5 md:grid-cols-3 md:items-end">
-          {/* Free */}
           <div className="woo-card flex flex-col p-7">
             <p className="woo-label">Free</p>
             <p className="mt-2 font-serif text-4xl text-woo-text">$0</p>
@@ -113,14 +177,14 @@ export default function PricingPage() {
               <button
                 type="button"
                 className="woo-btn-secondary mt-8 w-full"
-                onClick={openPortal}
+                disabled={portalLoading}
+                onClick={() => openPortal("cancel")}
               >
-                Downgrade
+                Se désabonner
               </button>
             )}
           </div>
 
-          {/* Woo+ — decoy: plain, no badge, same weight as Free */}
           <div className="woo-card flex flex-col p-7">
             <p className="woo-label">Woo+</p>
             <p className="mt-2 font-serif text-4xl text-woo-text">
@@ -136,9 +200,19 @@ export default function PricingPage() {
               ))}
             </ul>
             {userPlan === "woo_plus" ? (
-              <span className="mt-8 block w-full rounded-2xl border border-black/5 py-3.5 text-center text-sm text-woo-muted">
-                Current plan
-              </span>
+              <div className="mt-8 space-y-2">
+                <span className="block w-full rounded-2xl border border-black/5 py-3.5 text-center text-sm text-woo-muted">
+                  Current plan
+                </span>
+                <button
+                  type="button"
+                  className="woo-btn-secondary w-full text-sm"
+                  disabled={portalLoading}
+                  onClick={() => openPortal("cancel")}
+                >
+                  Se désabonner
+                </button>
+              </div>
             ) : (
               <button
                 type="button"
@@ -151,7 +225,6 @@ export default function PricingPage() {
             )}
           </div>
 
-          {/* Woo Pro — dominant */}
           <div className="woo-card relative flex scale-[1.02] flex-col border-2 border-woo-accent p-8 shadow-woo md:-mb-2 md:pb-9 md:pt-9">
             <span className="absolute right-4 top-4 rounded-full bg-woo-accent px-3 py-1 text-[10px] font-medium uppercase tracking-wider text-white">
               Most loved ⭐
@@ -170,9 +243,19 @@ export default function PricingPage() {
               ))}
             </ul>
             {userPlan === "woo_pro" ? (
-              <span className="mt-8 block w-full rounded-2xl bg-woo-accent-soft py-3.5 text-center text-sm font-medium text-woo-text">
-                Current plan
-              </span>
+              <div className="mt-8 space-y-2">
+                <span className="block w-full rounded-2xl bg-woo-accent-soft py-3.5 text-center text-sm font-medium text-woo-text">
+                  Current plan
+                </span>
+                <button
+                  type="button"
+                  className="woo-btn-secondary w-full text-sm"
+                  disabled={portalLoading}
+                  onClick={() => openPortal("cancel")}
+                >
+                  Se désabonner
+                </button>
+              </div>
             ) : (
               <button
                 type="button"
@@ -184,6 +267,66 @@ export default function PricingPage() {
               </button>
             )}
           </div>
+        </div>
+
+        <div className="woo-card mx-auto mt-12 max-w-xl p-6 sm:p-8">
+          <p className="woo-label">Paiement & abonnement</p>
+          <h2 className="mt-2 font-serif text-2xl font-bold text-woo-text">
+            Gérer ou se désabonner
+          </h2>
+          <p className="mt-2 text-sm text-woo-muted">
+            Annule via Stripe. Aucun engagement — tu peux te réabonner à tout
+            moment.
+          </p>
+
+          <label className="woo-label mb-2 mt-6 block">Email du paiement</label>
+          <input
+            type="email"
+            className="woo-input"
+            value={billingEmail}
+            onChange={(e) => setBillingEmail(e.target.value)}
+            placeholder="toi@email.com"
+          />
+
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              className="woo-btn-secondary flex-1"
+              disabled={portalLoading}
+              onClick={() => openPortal("manage")}
+            >
+              {portalLoading ? "Ouverture…" : "Gérer mon abonnement"}
+            </button>
+            <button
+              type="button"
+              className="flex-1 rounded-2xl border border-woo-accent/30 bg-woo-accent-soft px-6 py-3.5 text-base font-medium text-woo-text transition hover:bg-woo-accent hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={portalLoading || unsubLoading}
+              onClick={() => openPortal("cancel")}
+            >
+              Se désabonner (Stripe)
+            </button>
+          </div>
+
+          <button
+            type="button"
+            className="mt-3 w-full text-center text-sm text-woo-muted underline-offset-2 hover:text-woo-text hover:underline disabled:opacity-40"
+            disabled={unsubLoading}
+            onClick={cancelAtPeriodEnd}
+          >
+            {unsubLoading
+              ? "…"
+              : "Ou programmer l’arrêt à la fin de la période payée"}
+          </button>
+
+          {billingMsg && (
+            <p className="mt-4 text-center text-sm text-woo-accent">{billingMsg}</p>
+          )}
+
+          {!isPaid && (
+            <p className="mt-3 text-center text-xs text-woo-muted">
+              Entre l’email utilisé sur Stripe si tu es déjà abonné.
+            </p>
+          )}
         </div>
 
         <div className="mt-14 overflow-x-auto">

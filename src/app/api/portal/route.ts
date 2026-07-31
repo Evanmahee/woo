@@ -13,6 +13,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const email = body.email ? String(body.email).trim().toLowerCase() : null;
+    const intent = body.intent === "cancel" ? "cancel" : "manage";
+
     if (!email) {
       return NextResponse.json({ error: "email required" }, { status: 400 });
     }
@@ -20,17 +22,42 @@ export async function POST(req: NextRequest) {
     const billing = await getOrCreateBilling(email);
     if (!billing.stripe_customer_id) {
       return NextResponse.json(
-        { error: "No Stripe customer on file" },
+        {
+          error:
+            "Aucun abonnement Stripe trouvé pour cet email. Utilise l’email du paiement.",
+          code: "NO_CUSTOMER",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (billing.plan === "free" && intent === "cancel") {
+      return NextResponse.json(
+        { error: "Tu es déjà sur le plan Free." },
         { status: 400 }
       );
     }
 
     const stripe = getStripe();
-    const session = await stripe.billingPortal.sessions.create({
-      customer: billing.stripe_customer_id,
-      return_url: appUrl("/pricing"),
-    });
 
+    // Prefer deep-link into cancel flow when we have a subscription id
+    const sessionParams: Stripe.BillingPortal.SessionCreateParams = {
+      customer: billing.stripe_customer_id,
+      return_url: appUrl(
+        intent === "cancel" ? "/pricing?canceled=1" : "/pricing"
+      ),
+    };
+
+    if (intent === "cancel" && billing.stripe_subscription_id) {
+      sessionParams.flow_data = {
+        type: "subscription_cancel",
+        subscription_cancel: {
+          subscription: billing.stripe_subscription_id,
+        },
+      };
+    }
+
+    const session = await stripe.billingPortal.sessions.create(sessionParams);
     return NextResponse.json({ url: session.url });
   } catch (e) {
     console.error(e);
