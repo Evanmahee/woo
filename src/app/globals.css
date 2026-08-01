@@ -128,12 +128,23 @@ video:not(.hero-video) {
   height: auto;
 }
 
-.time-wheel {
+.time-wheel,
+.ios-wheel {
   scrollbar-width: none;
   -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: y mandatory;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
-.time-wheel::-webkit-scrollbar {
+.time-wheel::-webkit-scrollbar,
+.ios-wheel::-webkit-scrollbar {
   display: none;
+}
+
+.ios-wheel-item {
+  scroll-snap-align: center;
+  scroll-snap-stop: normal;
 }
 
 /* Hide iOS Safari native video chrome / play overlay on background hero */

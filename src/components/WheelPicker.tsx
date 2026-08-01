@@ -1,18 +1,17 @@
 "use client";
 
 import {
-  useCallback,
   useEffect,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 
-export const WHEEL_ITEM_H = 48;
-const PAD = 2;
-/** Finger movement multiplier — lower = slower, more precise. */
-const DRAG_FACTOR = 0.38;
-const WHEEL_STEP_PX = 48;
+/** Matches iOS UIPicker row height feel */
+export const WHEEL_ITEM_H = 40;
+const VISIBLE = 5;
+const PAD = Math.floor(VISIBLE / 2);
+export const WHEEL_HEIGHT = WHEEL_ITEM_H * VISIBLE;
 
 type WheelColumnProps = {
   items: number[];
@@ -27,6 +26,7 @@ let scrollLocks = 0;
 let lockedScrollY = 0;
 
 function lockPageScroll() {
+  if (typeof document === "undefined") return;
   if (scrollLocks === 0) {
     lockedScrollY = window.scrollY;
     const body = document.body;
@@ -42,6 +42,7 @@ function lockPageScroll() {
 }
 
 function unlockPageScroll() {
+  if (typeof document === "undefined") return;
   scrollLocks = Math.max(0, scrollLocks - 1);
   if (scrollLocks > 0) return;
   const body = document.body;
@@ -57,7 +58,8 @@ function unlockPageScroll() {
 }
 
 /**
- * Drag-based wheel — no nested scroll, so the page stays put on mobile.
+ * iOS-style picker column: native momentum scroll + scroll-snap.
+ * Page scroll is locked while the finger is on the wheel shell.
  */
 export function WheelColumn({
   items,
@@ -67,23 +69,13 @@ export function WheelColumn({
   formatLabel = (n) => String(n).padStart(2, "0"),
   className = "flex-1",
 }: WheelColumnProps) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const index = Math.max(0, items.indexOf(value));
-  const [offset, setOffset] = useState(-index * WHEEL_ITEM_H);
-  const offsetRef = useRef(offset);
+  const scrollerRef = useRef<HTMLDivElement>(null);
   const valueRef = useRef(value);
   const itemsRef = useRef(items);
   const onChangeRef = useRef(onChange);
-  const dragging = useRef(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const startY = useRef(0);
-  const startOffset = useRef(0);
-  const moved = useRef(false);
-  const wheelAcc = useRef(0);
-
-  useEffect(() => {
-    offsetRef.current = offset;
-  }, [offset]);
+  const ignoreScroll = useRef(false);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [active, setActive] = useState(value);
 
   useEffect(() => {
     valueRef.current = value;
@@ -91,140 +83,105 @@ export function WheelColumn({
     onChangeRef.current = onChange;
   }, [value, items, onChange]);
 
+  const indexOf = (n: number) => {
+    const i = items.indexOf(n);
+    return i >= 0 ? i : 0;
+  };
+
+  // Jump to controlled value (no smooth — avoids fighting momentum)
   useEffect(() => {
-    if (dragging.current) return;
-    setOffset(-Math.max(0, items.indexOf(value)) * WHEEL_ITEM_H);
+    const el = scrollerRef.current;
+    if (!el) return;
+    const i = indexOf(value);
+    const top = i * WHEEL_ITEM_H;
+    if (Math.abs(el.scrollTop - top) < 1.5) {
+      setActive(value);
+      return;
+    }
+    ignoreScroll.current = true;
+    el.scrollTop = top;
+    setActive(value);
+    const t = window.setTimeout(() => {
+      ignoreScroll.current = false;
+    }, 40);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync on value/items only
   }, [value, items]);
 
-  const clampOffset = useCallback((y: number, len: number) => {
-    const min = -(len - 1) * WHEEL_ITEM_H;
-    return Math.max(min, Math.min(0, y));
-  }, []);
-
-  const snapToNearest = useCallback((y: number) => {
+  function commitFromScroll() {
+    const el = scrollerRef.current;
+    if (!el) return;
     const list = itemsRef.current;
-    const raw = Math.round(-y / WHEEL_ITEM_H);
-    const i = Math.max(0, Math.min(list.length - 1, raw));
-    const snapped = -i * WHEEL_ITEM_H;
-    setOffset(snapped);
+    const i = Math.max(
+      0,
+      Math.min(list.length - 1, Math.round(el.scrollTop / WHEEL_ITEM_H))
+    );
+    // Hard snap if browser left us between ticks
+    const top = i * WHEEL_ITEM_H;
+    if (Math.abs(el.scrollTop - top) > 0.5) {
+      ignoreScroll.current = true;
+      el.scrollTo({ top, behavior: "smooth" });
+      window.setTimeout(() => {
+        ignoreScroll.current = false;
+      }, 220);
+    }
     const next = list[i];
+    setActive(next);
     if (next !== undefined && next !== valueRef.current) {
       onChangeRef.current(next);
     }
-  }, []);
+  }
 
   useEffect(() => {
-    const el = rootRef.current;
+    const el = scrollerRef.current;
     if (!el) return;
 
-    const onStart = (e: TouchEvent) => {
-      dragging.current = true;
-      setIsDragging(true);
-      moved.current = false;
-      startY.current = e.touches[0].clientY;
-      startOffset.current = offsetRef.current;
-      lockPageScroll();
-    };
-
-    const onMove = (e: TouchEvent) => {
-      if (!dragging.current) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const finger = e.touches[0].clientY - startY.current;
-      const dy = finger * DRAG_FACTOR;
-      if (Math.abs(finger) > 4) moved.current = true;
-      setOffset(clampOffset(startOffset.current + dy, itemsRef.current.length));
-    };
-
-    const onEnd = () => {
-      if (!dragging.current) return;
-      dragging.current = false;
-      setIsDragging(false);
-      snapToNearest(offsetRef.current);
-      unlockPageScroll();
-    };
-
-    el.addEventListener("touchstart", onStart, { passive: true });
-    el.addEventListener("touchmove", onMove, { passive: false });
-    el.addEventListener("touchend", onEnd);
-    el.addEventListener("touchcancel", onEnd);
-
-    return () => {
-      el.removeEventListener("touchstart", onStart);
-      el.removeEventListener("touchmove", onMove);
-      el.removeEventListener("touchend", onEnd);
-      el.removeEventListener("touchcancel", onEnd);
-      if (dragging.current) {
-        dragging.current = false;
-        unlockPageScroll();
-      }
-    };
-  }, [clampOffset, snapToNearest]);
-
-  // Non-passive wheel so trackpads don't scroll the page
-  useEffect(() => {
-    const el = rootRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      wheelAcc.current += e.deltaY;
-      if (Math.abs(wheelAcc.current) < WHEEL_STEP_PX) return;
-      const dir = wheelAcc.current > 0 ? 1 : -1;
-      wheelAcc.current = 0;
+    const onScroll = () => {
+      if (ignoreScroll.current) return;
       const list = itemsRef.current;
-      const cur = Math.max(0, list.indexOf(valueRef.current));
-      const i = Math.max(0, Math.min(list.length - 1, cur + dir));
-      if (list[i] !== valueRef.current) onChangeRef.current(list[i]);
+      const i = Math.max(
+        0,
+        Math.min(list.length - 1, Math.round(el.scrollTop / WHEEL_ITEM_H))
+      );
+      setActive(list[i]);
+      if (settleTimer.current) clearTimeout(settleTimer.current);
+      settleTimer.current = setTimeout(commitFromScroll, 120);
     };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
+
+    const onScrollEnd = () => {
+      if (settleTimer.current) clearTimeout(settleTimer.current);
+      commitFromScroll();
+    };
+
+    el.addEventListener("scroll", onScroll, { passive: true });
+    el.addEventListener("scrollend", onScrollEnd);
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      el.removeEventListener("scrollend", onScrollEnd);
+      if (settleTimer.current) clearTimeout(settleTimer.current);
+    };
   }, []);
 
   return (
     <div
-      ref={rootRef}
-      className={`relative h-[220px] select-none overflow-hidden touch-none ${className}`}
+      className={`relative overflow-hidden ${className}`}
+      style={{ height: WHEEL_HEIGHT }}
       role="listbox"
       aria-label={ariaLabel}
-      aria-activedescendant={`${ariaLabel}-${value}`}
-      onMouseDown={(e) => {
-        e.preventDefault();
-        dragging.current = true;
-        setIsDragging(true);
-        moved.current = false;
-        startY.current = e.clientY;
-        startOffset.current = offsetRef.current;
-        lockPageScroll();
-        const move = (ev: MouseEvent) => {
-          if (!dragging.current) return;
-          const finger = ev.clientY - startY.current;
-          const dy = finger * DRAG_FACTOR;
-          if (Math.abs(finger) > 4) moved.current = true;
-          setOffset(clampOffset(startOffset.current + dy, itemsRef.current.length));
-        };
-        const up = () => {
-          if (dragging.current) {
-            dragging.current = false;
-            setIsDragging(false);
-            snapToNearest(offsetRef.current);
-            unlockPageScroll();
-          }
-          window.removeEventListener("mousemove", move);
-          window.removeEventListener("mouseup", up);
-        };
-        window.addEventListener("mousemove", move);
-        window.addEventListener("mouseup", up);
-      }}
+      aria-activedescendant={`${ariaLabel}-${active}`}
     >
       <div
-        style={{
-          transform: `translate3d(0, ${offset + PAD * WHEEL_ITEM_H}px, 0)`,
-          transition: isDragging ? "none" : "transform 200ms ease-out",
-        }}
+        ref={scrollerRef}
+        className="ios-wheel h-full w-full overflow-y-auto overscroll-y-contain"
       >
+        <div style={{ height: PAD * WHEEL_ITEM_H }} aria-hidden />
         {items.map((n) => {
-          const selected = n === value;
+          const selected = n === active;
+          const dist = Math.min(
+            3,
+            Math.abs(items.indexOf(n) - items.indexOf(active))
+          );
+          const opacity = selected ? 1 : Math.max(0.22, 1 - dist * 0.28);
           return (
             <div
               key={n}
@@ -232,23 +189,29 @@ export function WheelColumn({
               role="option"
               aria-selected={selected}
               onClick={() => {
-                if (moved.current) return;
-                if (n !== value) onChange(n);
+                const el = scrollerRef.current;
+                const i = indexOf(n);
+                if (!el) return;
+                el.scrollTo({ top: i * WHEEL_ITEM_H, behavior: "smooth" });
+                setActive(n);
+                if (n !== valueRef.current) onChange(n);
               }}
-              className={`flex w-full shrink-0 items-center justify-center px-0.5 tabular-nums ${
-                selected
-                  ? "font-semibold text-woo-text"
-                  : "font-medium text-woo-muted/50"
-              }`}
+              className="ios-wheel-item flex w-full shrink-0 items-center justify-center px-0.5 tabular-nums"
               style={{
                 height: WHEEL_ITEM_H,
-                fontSize: selected ? "1.45rem" : "1.1rem",
+                opacity,
+                fontSize: selected ? "1.375rem" : "1.0625rem",
+                fontWeight: selected ? 600 : 400,
+                color: selected ? "#3D1F2B" : "#8A7A85",
+                transition:
+                  "opacity 120ms ease, font-size 120ms ease, color 120ms ease",
               }}
             >
               {formatLabel(n)}
             </div>
           );
         })}
+        <div style={{ height: PAD * WHEEL_ITEM_H }} aria-hidden />
       </div>
     </div>
   );
@@ -263,48 +226,54 @@ export function WheelShell({
 }) {
   const shellRef = useRef<HTMLDivElement>(null);
 
-  // Block page scroll anywhere over the carousel
   useEffect(() => {
     const el = shellRef.current;
     if (!el) return;
+
     const onStart = () => lockPageScroll();
     const onEnd = () => unlockPageScroll();
-    const block = (e: TouchEvent) => {
-      e.preventDefault();
-    };
+
     el.addEventListener("touchstart", onStart, { passive: true });
-    el.addEventListener("touchmove", block, { passive: false });
-    el.addEventListener("touchend", onEnd);
-    el.addEventListener("touchcancel", onEnd);
+    el.addEventListener("touchend", onEnd, { passive: true });
+    el.addEventListener("touchcancel", onEnd, { passive: true });
+
     return () => {
       el.removeEventListener("touchstart", onStart);
-      el.removeEventListener("touchmove", block);
       el.removeEventListener("touchend", onEnd);
       el.removeEventListener("touchcancel", onEnd);
+      while (scrollLocks > 0) unlockPageScroll();
     };
   }, []);
 
   return (
     <div
       ref={shellRef}
-      className="overflow-hidden rounded-2xl border border-black/5 bg-gradient-to-b from-white via-[#FFF8F6] to-woo-accent-soft/40 shadow-inner touch-none [contain:layout_paint]"
+      className="ios-picker overflow-hidden rounded-2xl border border-black/5 bg-[#F7F2F0] shadow-inner [contain:layout]"
     >
-      <div className="relative flex h-[220px] items-stretch px-1.5">
+      <div
+        className="relative flex items-stretch px-1"
+        style={{ height: WHEEL_HEIGHT }}
+      >
+        {/* iOS selection indicator */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-3 top-1/2 z-10 h-12 -translate-y-1/2 rounded-xl border border-woo-accent/25 bg-woo-accent/10"
+          className="pointer-events-none absolute inset-x-2 top-1/2 z-10 -translate-y-1/2 rounded-[8px] bg-black/[0.06]"
+          style={{ height: WHEEL_ITEM_H }}
         />
+        {/* Soft fade like UIPickerView */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 z-20 h-14 bg-gradient-to-b from-[#FFF8F6] via-[#FFF8F6]/85 to-transparent"
+          className="pointer-events-none absolute inset-0 z-20"
+          style={{
+            background:
+              "linear-gradient(to bottom, rgba(247,242,240,0.96) 0%, rgba(247,242,240,0.55) 18%, transparent 36%, transparent 64%, rgba(247,242,240,0.55) 82%, rgba(247,242,240,0.96) 100%)",
+          }}
         />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-14 bg-gradient-to-t from-woo-accent-soft/45 via-[#FFF8F6]/75 to-transparent"
-        />
-        {children}
+        <div className="relative z-[5] flex w-full items-stretch">
+          {children}
+        </div>
       </div>
-      <div className="border-t border-black/5 bg-white/50 py-2.5 text-center font-serif text-lg text-woo-text">
+      <div className="border-t border-black/[0.06] bg-white/70 py-2.5 text-center font-serif text-lg text-woo-text">
         {footer}
       </div>
     </div>

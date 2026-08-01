@@ -68,7 +68,7 @@ export function TimeCarousel({
       />
       <div
         aria-hidden
-        className="relative z-30 flex w-5 shrink-0 items-center justify-center font-serif text-2xl font-bold text-woo-accent"
+        className="relative z-[6] flex w-5 shrink-0 items-center justify-center font-serif text-2xl font-bold text-woo-accent"
       >
         :
       </div>
