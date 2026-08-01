@@ -118,8 +118,12 @@ input[type="time"]::-webkit-date-and-time-value {
 }
 
 img,
-video,
 svg {
+  max-width: 100%;
+  height: auto;
+}
+
+video:not(.hero-video) {
   max-width: 100%;
   height: auto;
 }
@@ -133,23 +137,45 @@ svg {
 }
 
 /* Hide iOS Safari native video chrome / play overlay on background hero */
+.hero-video-wrap {
+  background: #3d1f2b;
+}
+
 .hero-video {
-  max-width: none;
-  height: 100%;
+  max-width: none !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
   pointer-events: none;
   -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.hero-video-mask {
+  /* Soft center veil so the iOS ▶ glyph never reads as a control */
+  background: radial-gradient(
+    circle at center,
+    rgba(61, 31, 43, 0.18) 0%,
+    rgba(61, 31, 43, 0.05) 42%,
+    transparent 70%
+  );
 }
 
 .hero-video::-webkit-media-controls,
 .hero-video::-webkit-media-controls-enclosure,
+.hero-video::-webkit-media-controls-panel,
 .hero-video::-webkit-media-controls-start-playback-button,
-.hero-video::-webkit-media-controls-overlay-play-button {
+.hero-video::-webkit-media-controls-overlay-play-button,
+.hero-video::-webkit-media-controls-play-button {
   display: none !important;
-  -webkit-appearance: none;
-  opacity: 0;
-  pointer-events: none;
-  width: 0;
-  height: 0;
+  -webkit-appearance: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  max-width: 0 !important;
+  max-height: 0 !important;
 }
 
 @media (max-width: 639px) {
