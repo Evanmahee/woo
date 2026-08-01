@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarHeart, Lock } from "lucide-react";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { DateCarousel } from "@/components/DateCarousel";
 import { TimeCarousel } from "@/components/TimeCarousel";
 import { Logo, UpgradeModal } from "@/components/ui";
 import { ActivityCheckboxGrid, PlanDropdown } from "@/components/ActivityPicker";
@@ -112,12 +113,7 @@ export default function CreateStep1() {
           <div className="mt-8 space-y-5">
             <div>
               <label className="woo-label mb-2 block">{t.create1.date}</label>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="woo-input"
-              />
+              <DateCarousel value={date} onChange={setDate} />
             </div>
 
             <div>
