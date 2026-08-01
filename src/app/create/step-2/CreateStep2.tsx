@@ -118,9 +118,10 @@ export default function CreateStep2() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ send_token: createData.send_token }),
       });
-      const sendData = await sendRes.json();
+      const sendData = await sendRes.json().catch(() => ({}));
       if (!sendRes.ok) {
-        console.warn(sendData.error);
+        console.error("Woo send failed:", sendRes.status, sendData);
+        throw new Error(t.create2.errSend);
       }
 
       sessionStorage.removeItem(DRAFT_STORAGE_KEY);

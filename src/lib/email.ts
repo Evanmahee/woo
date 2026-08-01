@@ -12,6 +12,36 @@ function getResend() {
 
 const FROM = process.env.RESEND_FROM_EMAIL || "Woo <onboarding@resend.dev>";
 
+export type ResendSendResult = { id: string };
+
+async function sendWithResend(opts: {
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<ResendSendResult> {
+  const resend = getResend();
+  const { data, error } = await resend.emails.send({
+    from: FROM,
+    to: opts.to,
+    subject: opts.subject,
+    html: opts.html,
+  });
+
+  if (error) {
+    console.error("Resend send failed:", error);
+    throw new Error(error.message || "Failed to send email");
+  }
+
+  const id = data?.id;
+  if (!id) {
+    console.error("Resend send returned no email id:", data);
+    throw new Error("Failed to send email");
+  }
+
+  console.log("Resend send succeeded, email id:", id);
+  return { id };
+}
+
 function emailShell(content: string) {
   return `<!DOCTYPE html>
 <html>
@@ -82,12 +112,9 @@ export function buildInvitationEmailHtml(woo: Pick<
   };
 }
 
-export async function sendWooInvitation(woo: Woo) {
-  const resend = getResend();
+export async function sendWooInvitation(woo: Woo): Promise<ResendSendResult> {
   const { subject, html } = buildInvitationEmailHtml(woo);
-
-  await resend.emails.send({
-    from: FROM,
+  return sendWithResend({
     to: woo.recipient_email,
     subject,
     html,
@@ -95,7 +122,6 @@ export async function sendWooInvitation(woo: Woo) {
 }
 
 export async function notifySenderOfResponse(woo: Woo, summary: string) {
-  const resend = getResend();
   const link = appUrl(`/w/${woo.id}`);
 
   const html = emailShell(`
@@ -106,8 +132,7 @@ export async function notifySenderOfResponse(woo: Woo, summary: string) {
     ${ctaButton(link, "View Woo")}
   `);
 
-  await resend.emails.send({
-    from: FROM,
+  return sendWithResend({
     to: woo.sender_email,
     subject: `${woo.recipient_name} responded to your Woo 🎉`.slice(0, 200),
     html,
@@ -122,7 +147,6 @@ export async function sendSecurityActionEmail(opts: {
   ctaUrl: string;
   ctaLabel: string;
 }) {
-  const resend = getResend();
   const html = emailShell(`
     <h1 style="margin:0 0 12px;font-size:26px;color:#3D1F2B;font-weight:700;">${escapeHtml(opts.heading)}</h1>
     <p style="margin:0 0 16px;font-family:system-ui,sans-serif;font-size:16px;line-height:1.6;color:#3D1F2B;">
@@ -134,8 +158,7 @@ export async function sendSecurityActionEmail(opts: {
     </p>
   `);
 
-  await resend.emails.send({
-    from: FROM,
+  return sendWithResend({
     to: opts.to,
     subject: opts.subject.slice(0, 200),
     html,

@@ -142,6 +142,7 @@ const en = {
     sending: "Sending…",
     errSender: "Add your name and email so they know who Woo'd them.",
     errRecipient: "Add the recipient's name and email.",
+    errSend: "We couldn't send your Woo. Please try again in a moment.",
   },
   success: {
     welcome: "Welcome to {plan}",
@@ -369,6 +370,7 @@ const fr: Dictionary = {
     sending: "Envoi…",
     errSender: "Ajoute ton prénom et ton email.",
     errRecipient: "Ajoute le prénom et l’email du destinataire.",
+    errSend: "Impossible d’envoyer ton Woo. Réessaie dans un instant.",
   },
   success: {
     welcome: "Bienvenue sur {plan}",
@@ -598,6 +600,7 @@ const es: Dictionary = {
     sending: "Enviando…",
     errSender: "Añade tu nombre y email.",
     errRecipient: "Añade el nombre y email del destinatario.",
+    errSend: "No pudimos enviar tu Woo. Inténtalo de nuevo en un momento.",
   },
   success: {
     welcome: "Bienvenido/a a {plan}",

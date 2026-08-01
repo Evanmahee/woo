@@ -55,8 +55,23 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    await sendWooInvitation(woo as Woo);
-    return NextResponse.json({ ok: true });
+    try {
+      const result = await sendWooInvitation(woo as Woo);
+      return NextResponse.json({
+        success: true,
+        ok: true,
+        emailId: result.id,
+      });
+    } catch (sendErr) {
+      console.error("Resend send failed:", sendErr);
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Failed to send invitation email",
+        },
+        { status: 502 }
+      );
+    }
   } catch (e) {
     return publicError(500, "Failed to send email", e);
   }
