@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Check } from "lucide-react";
 import { ACTIVITIES, getActivity } from "@/lib/activities";
+import { celebrateAccept } from "@/lib/confetti";
 
 type Mode = "fixed" | "recipient_choice" | "done_accept" | "done_choice" | "done_alt";
 
@@ -127,9 +128,10 @@ export default function RespondPreviewPage() {
                   type="button"
                   className="woo-btn w-full text-lg tracking-wide"
                   disabled={mode === "recipient_choice" && !selected}
-                  onClick={() =>
-                    setMode(mode === "fixed" ? "done_accept" : "done_choice")
-                  }
+                  onClick={() => {
+                    setMode(mode === "fixed" ? "done_accept" : "done_choice");
+                    celebrateAccept();
+                  }}
                 >
                   Oui
                 </button>

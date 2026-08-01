@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { formatActivityLabel } from "./activities";
+import { escapeHtml } from "./security";
 import { appUrl } from "./supabase";
 import type { Woo } from "./types";
 
@@ -39,7 +40,7 @@ function emailShell(content: string) {
 }
 
 function ctaButton(href: string, label: string) {
-  return `<a href="${href}" style="display:inline-block;margin-top:24px;padding:14px 28px;background:#E85D75;color:#fff;text-decoration:none;border-radius:16px;font-family:system-ui,sans-serif;font-size:15px;font-weight:500;">${label}</a>`;
+  return `<a href="${escapeHtml(href)}" style="display:inline-block;margin-top:24px;padding:14px 28px;background:#E85D75;color:#fff;text-decoration:none;border-radius:16px;font-family:system-ui,sans-serif;font-size:15px;font-weight:500;">${escapeHtml(label)}</a>`;
 }
 
 export function buildInvitationEmailHtml(woo: Pick<
@@ -55,20 +56,25 @@ export function buildInvitationEmailHtml(woo: Pick<
   const link = appUrl(`/w/${woo.id}`);
   const planLine =
     woo.activity_mode === "fixed"
-      ? formatActivityLabel(woo.plan)
+      ? escapeHtml(formatActivityLabel(woo.plan))
       : "a shortlist of date ideas for you to choose from";
 
+  const sender = escapeHtml(woo.sender_name);
+  const date = escapeHtml(woo.date);
+  const time = escapeHtml(String(woo.time).slice(0, 5));
+  const message = woo.custom_message ? escapeHtml(woo.custom_message) : "";
+
   return {
-    subject: `${woo.sender_name} wants to woo you 💌`,
+    subject: `${woo.sender_name} wants to woo you 💌`.slice(0, 200),
     html: emailShell(`
     <h1 style="margin:0 0 12px;font-size:28px;color:#3D1F2B;font-weight:700;">You've been Woo'd</h1>
     <p style="margin:0 0 16px;font-family:system-ui,sans-serif;font-size:16px;line-height:1.6;color:#3D1F2B;">
-      <strong>${woo.sender_name}</strong> wants to woo you on <strong>${woo.date}</strong> at <strong>${String(woo.time).slice(0, 5)}</strong>
+      <strong>${sender}</strong> wants to woo you on <strong>${date}</strong> at <strong>${time}</strong>
       — ${planLine}.
     </p>
     ${
-      woo.custom_message
-        ? `<p style="margin:0 0 8px;padding:16px;background:#F7DCE3;border-radius:16px;font-family:system-ui,sans-serif;font-size:15px;font-style:italic;color:#3D1F2B;">“${woo.custom_message}”</p>`
+      message
+        ? `<p style="margin:0 0 8px;padding:16px;background:#F7DCE3;border-radius:16px;font-family:system-ui,sans-serif;font-size:15px;font-style:italic;color:#3D1F2B;">“${message}”</p>`
         : ""
     }
     ${ctaButton(link, "Open your Woo 💌")}
@@ -88,17 +94,14 @@ export async function sendWooInvitation(woo: Woo) {
   });
 }
 
-export async function notifySenderOfResponse(
-  woo: Woo,
-  summary: string
-) {
+export async function notifySenderOfResponse(woo: Woo, summary: string) {
   const resend = getResend();
   const link = appUrl(`/w/${woo.id}`);
 
   const html = emailShell(`
     <h1 style="margin:0 0 12px;font-size:26px;color:#3D1F2B;font-weight:700;">Your Woo got a reply</h1>
     <p style="margin:0 0 16px;font-family:system-ui,sans-serif;font-size:16px;line-height:1.6;color:#3D1F2B;">
-      ${summary}
+      ${escapeHtml(summary)}
     </p>
     ${ctaButton(link, "View Woo")}
   `);
@@ -106,7 +109,35 @@ export async function notifySenderOfResponse(
   await resend.emails.send({
     from: FROM,
     to: woo.sender_email,
-    subject: `${woo.recipient_name} responded to your Woo 🎉`,
+    subject: `${woo.recipient_name} responded to your Woo 🎉`.slice(0, 200),
+    html,
+  });
+}
+
+export async function sendSecurityActionEmail(opts: {
+  to: string;
+  subject: string;
+  heading: string;
+  body: string;
+  ctaUrl: string;
+  ctaLabel: string;
+}) {
+  const resend = getResend();
+  const html = emailShell(`
+    <h1 style="margin:0 0 12px;font-size:26px;color:#3D1F2B;font-weight:700;">${escapeHtml(opts.heading)}</h1>
+    <p style="margin:0 0 16px;font-family:system-ui,sans-serif;font-size:16px;line-height:1.6;color:#3D1F2B;">
+      ${escapeHtml(opts.body)}
+    </p>
+    ${ctaButton(opts.ctaUrl, opts.ctaLabel)}
+    <p style="margin:24px 0 0;font-family:system-ui,sans-serif;font-size:12px;color:#8A7A85;">
+      If you didn&apos;t request this, you can ignore this email.
+    </p>
+  `);
+
+  await resend.emails.send({
+    from: FROM,
+    to: opts.to,
+    subject: opts.subject.slice(0, 200),
     html,
   });
 }

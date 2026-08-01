@@ -1,5 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import { Playfair_Display, Outfit } from "next/font/google";
+import { CookieConsentProvider } from "@/components/CookieBanner";
+import { LocaleProvider } from "@/lib/i18n/provider";
 import "./globals.css";
 
 const playfair = Playfair_Display({
@@ -24,7 +27,25 @@ export const metadata: Metadata = {
     description: "The easiest way to ask. Send a beautiful date invitation.",
     type: "website",
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Woo",
+  },
+  formatDetection: {
+    telephone: false,
+  },
 };
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+  themeColor: "#EAE0F8",
+};
+
+const googleAdsId = process.env.NEXT_PUBLIC_GOOGLE_ADS_ID;
 
 export default function RootLayout({
   children,
@@ -33,8 +54,41 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${playfair.variable} ${outfit.variable} font-sans antialiased`}>
-        {children}
+      <body
+        className={`${playfair.variable} ${outfit.variable} font-sans antialiased`}
+      >
+        <Script id="consent-default" strategy="beforeInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('consent', 'default', {
+              ad_storage: 'denied',
+              ad_user_data: 'denied',
+              ad_personalization: 'denied',
+              analytics_storage: 'denied',
+              wait_for_update: 500
+            });
+          `}
+        </Script>
+        {googleAdsId ? (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${googleAdsId}`}
+              strategy="afterInteractive"
+            />
+            <Script id="gtag-init" strategy="afterInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${googleAdsId}');
+              `}
+            </Script>
+          </>
+        ) : null}
+        <LocaleProvider>
+          <CookieConsentProvider>{children}</CookieConsentProvider>
+        </LocaleProvider>
       </body>
     </html>
   );

@@ -2,15 +2,32 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { getOrCreateBilling } from "@/lib/billing";
 import { PLAN_LIMITS } from "@/lib/plans";
+import {
+  clientIp,
+  publicError,
+  rateLimit,
+  rateLimitedResponse,
+} from "@/lib/security";
+import { surpriseDateSchema, zodErrorMessage } from "@/lib/validation";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { email, preferences, budget, city } = body;
+    const ip = clientIp(req);
+    const rl = rateLimit(`surprise:${ip}`, 5, 60_000);
+    if (!rl.ok) return rateLimitedResponse(rl.retryAfterSec);
 
-    if (!email) {
-      return NextResponse.json({ error: "email required" }, { status: 400 });
+    const raw = await req.json().catch(() => null);
+    const parsed = surpriseDateSchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: zodErrorMessage(parsed.error) },
+        { status: 400 }
+      );
     }
+
+    const { email, preferences, budget, city } = parsed.data;
+    const emailRl = rateLimit(`surprise:email:${email}`, 10, 60 * 60_000);
+    if (!emailRl.ok) return rateLimitedResponse(emailRl.retryAfterSec);
 
     const billing = await getOrCreateBilling(email);
     if (!PLAN_LIMITS[billing.plan].surpriseDate) {
@@ -27,16 +44,16 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { error: "ANTHROPIC_API_KEY not configured" },
-        { status: 500 }
+        { error: "Surprise Date is temporarily unavailable" },
+        { status: 503 }
       );
     }
 
     const anthropic = new Anthropic({ apiKey });
     const prompt = `Generate one creative, romantic, personalized date idea.
-Preferences: ${preferences || "open to anything"}
-Budget: ${budget || "moderate"}
-City / area: ${city || "local"}
+Preferences: ${(preferences || "open to anything").slice(0, 500)}
+Budget: ${(budget || "moderate").slice(0, 80)}
+City / area: ${(city || "local").slice(0, 80)}
 
 Respond with JSON only:
 {"title":"...","description":"...","emoji":"...","tips":["...","..."]}`;
@@ -54,10 +71,6 @@ Respond with JSON only:
 
     return NextResponse.json({ idea });
   } catch (e) {
-    console.error(e);
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Failed to generate" },
-      { status: 500 }
-    );
+    return publicError(500, "Failed to generate", e);
   }
 }

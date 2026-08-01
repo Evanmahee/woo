@@ -2,11 +2,20 @@
 
 import { useMemo, useState } from "react";
 import { Check } from "lucide-react";
-import { ACTIVITIES, formatActivityLabel, getActivity } from "@/lib/activities";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import {
+  ACTIVITIES,
+  activityLabel,
+  formatActivityLabel,
+  getActivity,
+} from "@/lib/activities";
+import { celebrateAccept } from "@/lib/confetti";
+import { useI18n } from "@/lib/i18n/provider";
 import { getTheme } from "@/lib/themes";
-import type { Woo } from "@/lib/types";
+import type { PublicWoo, Woo } from "@/lib/types";
 
-export default function WooRecipientClient({ woo }: { woo: Woo }) {
+export default function WooRecipientClient({ woo }: { woo: PublicWoo | Woo }) {
+  const { t, tf, locale } = useI18n();
   const theme = getTheme(woo.theme);
   const [selected, setSelected] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -37,8 +46,11 @@ export default function WooRecipientClient({ woo }: { woo: Woo }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed");
+      const accepted =
+        payload.action === "accept" || payload.action === "choose_activity";
       setDone(true);
       setStatusMsg(data.summary || "Response sent!");
+      if (accepted) celebrateAccept();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
@@ -48,11 +60,14 @@ export default function WooRecipientClient({ woo }: { woo: Woo }) {
 
   return (
     <div
-      className="flex min-h-screen items-center justify-center px-4 py-12"
+      className="flex min-h-[100dvh] flex-col items-center justify-center px-4 py-10 pt-[max(2.5rem,env(safe-area-inset-top))] pb-[max(2.5rem,env(safe-area-inset-bottom))]"
       style={{ background: theme.pageBg }}
     >
+      <div className="mb-4 w-full max-w-md flex justify-end">
+        <LanguageSwitcher variant="soft" />
+      </div>
       <div
-        className="w-full max-w-md rounded-3xl p-6 shadow-woo sm:p-8"
+        className="w-full max-w-md rounded-3xl p-5 shadow-woo sm:p-8"
         style={{ background: theme.cardBg }}
       >
         <p
@@ -63,7 +78,7 @@ export default function WooRecipientClient({ woo }: { woo: Woo }) {
           Woo
         </p>
         <p className="mt-1 text-center text-xs tracking-[0.2em] uppercase text-woo-muted">
-          To woo.
+          {t.recipient.tagline}
         </p>
 
         {done ? (
@@ -71,33 +86,33 @@ export default function WooRecipientClient({ woo }: { woo: Woo }) {
             <p className="text-5xl">💌</p>
             <h1 className="mt-4 font-serif text-3xl font-bold text-woo-text">
               {woo.status === "proposed_alt" || statusMsg.includes("suggested")
-                ? "Suggestion sent"
-                : "You're in!"}
+                ? t.recipient.suggestionSent
+                : t.recipient.youreIn}
             </h1>
             <p className="mt-3 text-woo-muted">
               {statusMsg ||
                 (woo.status === "accepted"
-                  ? `You chose ${formatActivityLabel(woo.chosen_activity || woo.plan)}`
+                  ? formatActivityLabel(woo.chosen_activity || woo.plan, locale)
                   : woo.status === "proposed_alt"
-                    ? `You suggested ${woo.proposed_alt_date} at ${String(woo.proposed_alt_time || "").slice(0, 5)}`
-                    : "We've let them know.")}
+                    ? `${woo.proposed_alt_date} · ${String(woo.proposed_alt_time || "").slice(0, 5)}`
+                    : t.recipient.letThemKnow)}
             </p>
             {woo.chosen_activity && (
               <p className="mt-4 text-lg text-woo-text">
-                {formatActivityLabel(woo.chosen_activity)}
+                {formatActivityLabel(woo.chosen_activity, locale)}
               </p>
             )}
           </div>
         ) : (
           <>
-            <h1 className="mt-8 text-center font-serif text-3xl font-bold leading-tight text-woo-text sm:text-4xl">
-              {woo.sender_name} wants to woo you
+            <h1 className="mt-8 text-center font-serif text-[1.75rem] font-bold leading-tight text-woo-text sm:text-4xl">
+              {tf(t.recipient.wantsToWoo, { name: woo.sender_name })}
             </h1>
             <p className="mt-3 text-center text-woo-muted">
-              on <strong className="text-woo-text">{woo.date}</strong> at{" "}
-              <strong className="text-woo-text">
-                {String(woo.time).slice(0, 5)}
-              </strong>
+              {tf(t.recipient.onAt, {
+                date: woo.date,
+                time: String(woo.time).slice(0, 5),
+              })}
             </p>
 
             {woo.custom_message && (
@@ -110,15 +125,15 @@ export default function WooRecipientClient({ woo }: { woo: Woo }) {
               <div className="mt-8 flex flex-col items-center gap-2 rounded-2xl border border-black/5 bg-white/60 py-6">
                 <span className="text-4xl">{fixedActivity.emoji}</span>
                 <span className="font-medium text-woo-text">
-                  {fixedActivity.label}
+                  {activityLabel(fixedActivity.key, locale)}
                 </span>
               </div>
             )}
 
             {woo.activity_mode === "recipient_choice" && (
               <div className="mt-8">
-                <p className="woo-label mb-3 text-center">Pick your favorite</p>
-                <div className="grid grid-cols-2 gap-2">
+                <p className="woo-label mb-3 text-center">{t.recipient.pickFavorite}</p>
+                <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2">
                   {proposed.map((activity) => {
                     if (!activity) return null;
                     const isSelected = selected === activity.key;
@@ -127,7 +142,7 @@ export default function WooRecipientClient({ woo }: { woo: Woo }) {
                         key={activity.key}
                         type="button"
                         onClick={() => setSelected(activity.key)}
-                        className={`relative flex flex-col items-center gap-2 rounded-2xl border px-3 py-5 transition ${
+                        className={`relative flex min-h-[72px] flex-col items-center gap-2 rounded-2xl border px-3 py-5 touch-manipulation transition ${
                           isSelected
                             ? "border-woo-accent bg-woo-accent-soft"
                             : "border-black/5 bg-white hover:border-woo-accent/40"
@@ -135,7 +150,7 @@ export default function WooRecipientClient({ woo }: { woo: Woo }) {
                       >
                         <span className="text-3xl">{activity.emoji}</span>
                         <span className="text-sm font-medium text-woo-text">
-                          {activity.label}
+                          {activityLabel(activity.key, locale)}
                         </span>
                         {isSelected && (
                           <span className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-woo-accent text-white">
@@ -167,7 +182,7 @@ export default function WooRecipientClient({ woo }: { woo: Woo }) {
                       })
                 }
               >
-                Oui
+                {t.recipient.yes}
               </button>
             </div>
 

@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarHeart, Clock, Lock } from "lucide-react";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { Logo, UpgradeModal } from "@/components/ui";
 import { ActivityCheckboxGrid, PlanDropdown } from "@/components/ActivityPicker";
 import type { ActivityKey } from "@/lib/activities";
+import { useI18n } from "@/lib/i18n/provider";
 import {
   PLAN_LIMITS,
   readStoredPlan,
@@ -16,6 +18,7 @@ import { DRAFT_STORAGE_KEY, type ActivityMode, type CreateDraft } from "@/lib/ty
 
 export default function CreateStep1() {
   const router = useRouter();
+  const { t } = useI18n();
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [mode, setMode] = useState<ActivityMode>("fixed");
@@ -53,19 +56,19 @@ export default function CreateStep1() {
   function continueNext() {
     setError("");
     if (!date || !time) {
-      setError("Please pick a date and time.");
+      setError(t.create1.errDateTime);
       return;
     }
     if (mode === "recipient_choice" && !PLAN_LIMITS[userPlan].recipientChoice) {
-      openUpgrade("woo_plus", "Let them pick");
+      openUpgrade("woo_plus", t.create1.letThemPick);
       return;
     }
     if (mode === "fixed" && !plan) {
-      setError("Please choose a plan.");
+      setError(t.create1.errPlan);
       return;
     }
     if (mode === "recipient_choice" && (proposed.length < 2 || proposed.length > 5)) {
-      setError("Select between 2 and 5 activities for them to choose from.");
+      setError(t.create1.errProposed);
       return;
     }
 
@@ -83,28 +86,31 @@ export default function CreateStep1() {
   const canRecipientChoice = PLAN_LIMITS[userPlan].recipientChoice;
 
   return (
-    <div className="min-h-screen bg-woo-gradient px-4 py-8 pb-32">
-      <div className="mx-auto max-w-md">
-        <div className="mb-8 flex items-center justify-between">
-          <Logo />
-          <span className="woo-label">Step 1 of 2</span>
+    <div className="min-h-screen overflow-x-hidden bg-woo-gradient px-4 py-6 pb-36 pt-[max(1.5rem,env(safe-area-inset-top))] sm:py-8 sm:pb-32">
+      <div className="mx-auto w-full max-w-md">
+        <div className="mb-6 flex items-center justify-between gap-3 sm:mb-8">
+          <Logo className="text-2xl sm:text-3xl" />
+          <div className="flex items-center gap-2">
+            <LanguageSwitcher variant="soft" />
+            <span className="woo-label shrink-0">{t.create1.step}</span>
+          </div>
         </div>
 
-        <div className="woo-card p-6 sm:p-8">
+        <div className="woo-card p-5 sm:p-8">
           <div className="woo-badge-icon mb-5">
             <CalendarHeart className="h-5 w-5 text-woo-accent" />
           </div>
 
-          <h1 className="font-serif text-3xl font-bold text-woo-text sm:text-4xl">
-            When works for you?
+          <h1 className="font-serif text-[1.75rem] font-bold leading-tight text-woo-text sm:text-4xl">
+            {t.create1.title}
           </h1>
-          <p className="mt-2 text-woo-muted">
-            Pick a date and time — I&apos;ll make it special.
+          <p className="mt-2 text-sm text-woo-muted sm:text-base">
+            {t.create1.subtitle}
           </p>
 
           <div className="mt-8 space-y-5">
             <div>
-              <label className="woo-label mb-2 block">Date</label>
+              <label className="woo-label mb-2 block">{t.create1.date}</label>
               <input
                 type="date"
                 value={date}
@@ -114,7 +120,7 @@ export default function CreateStep1() {
             </div>
 
             <div>
-              <label className="woo-label mb-2 block">Time</label>
+              <label className="woo-label mb-2 block">{t.create1.time}</label>
               <div className="relative">
                 <input
                   type="time"
@@ -127,38 +133,38 @@ export default function CreateStep1() {
             </div>
 
             <div>
-              <label className="woo-label mb-2 block">Who picks the plan?</label>
-              <div className="grid grid-cols-2 gap-2 rounded-2xl bg-black/[0.03] p-1.5">
+              <label className="woo-label mb-2 block">{t.create1.whoPicks}</label>
+              <div className="grid grid-cols-1 gap-2 rounded-2xl bg-black/[0.03] p-1.5 min-[380px]:grid-cols-2">
                 <button
                   type="button"
                   onClick={() => setMode("fixed")}
-                  className={`rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                  className={`min-h-[48px] rounded-xl px-3 py-2.5 text-sm font-medium touch-manipulation transition ${
                     mode === "fixed"
                       ? "bg-white text-woo-text shadow-sm"
                       : "text-woo-muted"
                   }`}
                 >
-                  I&apos;ll pick 🎯
+                  {t.create1.illPick}
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     if (!canRecipientChoice) {
-                      openUpgrade("woo_plus", "Let them pick");
+                      openUpgrade("woo_plus", t.create1.letThemPick);
                       return;
                     }
                     setMode("recipient_choice");
                   }}
-                  className={`relative rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                  className={`relative min-h-[48px] rounded-xl px-3 py-2.5 text-sm font-medium touch-manipulation transition ${
                     mode === "recipient_choice"
                       ? "bg-white text-woo-text shadow-sm"
                       : "text-woo-muted"
                   }`}
                 >
-                  Let them pick 💫
+                  {t.create1.letThemPick}
                   {!canRecipientChoice && (
                     <span className="mt-1 flex items-center justify-center gap-0.5 text-[9px] uppercase tracking-wide text-woo-accent">
-                      <Lock className="h-2.5 w-2.5" /> Woo+
+                      <Lock className="h-2.5 w-2.5" /> {t.plans.woo_plus}
                     </span>
                   )}
                 </button>
@@ -166,7 +172,7 @@ export default function CreateStep1() {
             </div>
 
             <div>
-              <label className="woo-label mb-2 block">The Plan</label>
+              <label className="woo-label mb-2 block">{t.create1.thePlan}</label>
               {mode === "fixed" ? (
                 <PlanDropdown
                   value={plan}
@@ -191,10 +197,10 @@ export default function CreateStep1() {
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 border-t border-black/5 bg-white/80 p-4 backdrop-blur-md">
+      <div className="woo-bottom-bar">
         <div className="mx-auto max-w-md">
           <button type="button" className="woo-btn w-full" onClick={continueNext}>
-            Continue
+            {t.create1.continue}
           </button>
         </div>
       </div>

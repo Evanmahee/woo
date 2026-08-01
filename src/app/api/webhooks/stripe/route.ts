@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { setUserPlan } from "@/lib/billing";
 import { tierFromStripePriceId, type PlanTier } from "@/lib/plans";
+import { publicError } from "@/lib/security";
+import { getSupabaseAdmin } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 
@@ -21,12 +23,35 @@ async function planFromSubscription(
   return tierFromStripePriceId(priceId);
 }
 
+async function alreadyProcessed(eventId: string): Promise<boolean> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data } = await supabase
+      .from("stripe_webhook_events")
+      .select("id")
+      .eq("id", eventId)
+      .maybeSingle();
+    return Boolean(data);
+  } catch {
+    return false;
+  }
+}
+
+async function markProcessed(eventId: string, type: string): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  await supabase.from("stripe_webhook_events").upsert({
+    id: eventId,
+    type,
+    processed_at: new Date().toISOString(),
+  });
+}
+
 export async function POST(req: NextRequest) {
   const stripe = getStripe();
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) {
     return NextResponse.json(
-      { error: "Missing STRIPE_WEBHOOK_SECRET" },
+      { error: "Webhook not configured" },
       { status: 500 }
     );
   }
@@ -40,12 +65,15 @@ export async function POST(req: NextRequest) {
   let event: Stripe.Event;
   try {
     event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
-  } catch (err) {
-    console.error(err);
+  } catch {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
   try {
+    if (await alreadyProcessed(event.id)) {
+      return NextResponse.json({ received: true, duplicate: true });
+    }
+
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
       const email =
@@ -110,12 +138,15 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    try {
+      await markProcessed(event.id, event.type);
+    } catch (markErr) {
+      // Table may not exist yet — still acknowledge to Stripe after processing
+      console.warn("Webhook idempotency mark failed", markErr);
+    }
+
     return NextResponse.json({ received: true });
   } catch (e) {
-    console.error(e);
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Webhook error" },
-      { status: 500 }
-    );
+    return publicError(500, "Webhook error", e);
   }
 }

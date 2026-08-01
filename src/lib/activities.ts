@@ -1,3 +1,6 @@
+import type { Locale } from "@/lib/i18n/config";
+import { getDictionary } from "@/lib/i18n/dictionaries";
+
 export const ACTIVITIES = [
   { key: "arcade", label: "Arcade Night", emoji: "🕹️" },
   { key: "coffee", label: "Cozy Coffee", emoji: "☕" },
@@ -24,8 +27,21 @@ export function getActivity(key: string | null | undefined): Activity | undefine
   return ACTIVITIES.find((a) => a.key === key);
 }
 
-export function formatActivityLabel(key: string | null | undefined): string {
+export function activityLabel(
+  key: string | null | undefined,
+  locale: Locale = "en"
+): string {
   const activity = getActivity(key);
-  if (!activity) return "a date";
-  return `${activity.label} ${activity.emoji}`;
+  const dict = getDictionary(locale).activities;
+  if (!activity) return dict.aDate;
+  return dict[activity.key] || activity.label;
+}
+
+export function formatActivityLabel(
+  key: string | null | undefined,
+  locale: Locale = "en"
+): string {
+  const activity = getActivity(key);
+  if (!activity) return getDictionary(locale).activities.aDate;
+  return `${activityLabel(key, locale)} ${activity.emoji}`;
 }

@@ -33,6 +33,11 @@ export interface Woo {
   created_at: string;
 }
 
+/** Public recipient payload — no emails. */
+export type PublicWoo = Omit<Woo, "sender_email" | "recipient_email" | "recipient_name"> & {
+  recipient_name?: string;
+};
+
 export interface UsersBilling {
   id: string;
   email: string;

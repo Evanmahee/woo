@@ -11,18 +11,41 @@
   --color-accent-soft: #F7DCE3;
   --radius-base: 24px;
   --space-unit: 8px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 html {
   scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 body {
   color: var(--color-text);
   background: var(--color-bg-gradient);
-  background-attachment: fixed;
   min-height: 100vh;
+  min-height: 100dvh;
   font-family: var(--font-outfit), system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (min-width: 768px) {
+  body {
+    background-attachment: fixed;
+  }
 }
 
 @layer components {
@@ -37,27 +60,92 @@ body {
   .woo-btn {
     @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-woo-accent px-6 py-3.5
       text-base font-medium text-white transition hover:bg-[#d94f68]
-      disabled:cursor-not-allowed disabled:opacity-50;
+      disabled:cursor-not-allowed disabled:opacity-50
+      min-h-[48px] touch-manipulation;
   }
 
   .woo-btn-secondary {
     @apply inline-flex items-center justify-center gap-2 rounded-2xl border border-woo-accent/20
       bg-white px-6 py-3.5 text-base font-medium text-woo-text transition
-      hover:bg-woo-accent-soft;
+      hover:bg-woo-accent-soft
+      min-h-[48px] touch-manipulation;
   }
 
   .woo-input {
     @apply w-full rounded-2xl border border-black/5 bg-white/80 px-4 py-3.5
-      text-woo-text outline-none transition
-      focus:border-woo-accent/40 focus:ring-2 focus:ring-woo-accent/20;
+      text-base text-woo-text outline-none transition
+      focus:border-woo-accent/40 focus:ring-2 focus:ring-woo-accent/20
+      min-h-[48px];
   }
 
   .woo-badge-icon {
     @apply inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-woo-badge text-xl;
   }
+
+  .woo-bottom-bar {
+    @apply fixed bottom-0 left-0 right-0 border-t border-black/5 bg-white/80 backdrop-blur-md;
+    padding-bottom: max(1rem, var(--safe-bottom));
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
+    padding-top: 1rem;
+  }
+
+  .woo-page-pad {
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  }
+}
+
+/* Prevent iOS Safari zoom on focus (needs >= 16px) */
+input,
+textarea,
+select,
+button {
+  font-size: 16px;
 }
 
 input[type="date"],
 input[type="time"] {
   color-scheme: light;
+  min-height: 48px;
+  width: 100%;
+}
+
+/* Native date/time pickers can overflow on narrow screens */
+input[type="date"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value {
+  text-align: left;
+}
+
+img,
+video,
+svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Hide iOS Safari native video chrome / play overlay on background hero */
+.hero-video {
+  max-width: none;
+  height: 100%;
+  pointer-events: none;
+  -webkit-touch-callout: none;
+}
+
+.hero-video::-webkit-media-controls,
+.hero-video::-webkit-media-controls-enclosure,
+.hero-video::-webkit-media-controls-start-playback-button,
+.hero-video::-webkit-media-controls-overlay-play-button {
+  display: none !important;
+  -webkit-appearance: none;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+
+@media (max-width: 639px) {
+  .woo-card {
+    @apply rounded-2xl;
+  }
 }

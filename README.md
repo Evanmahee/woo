@@ -51,7 +51,11 @@ Open [http://localhost:3000](http://localhost:3000).
 | `/create/step-2` | Step 2 — recipient + theme + send |
 | `/w/[id]` | Public recipient page |
 | `/success` | Confirmation + share link |
-| `/pricing` | Free vs Woo Pro |
+| `/pricing` | Free / Woo+ / Woo Pro |
+| `/privacy` | Privacy & data deletion |
+| `/legal` | Legal notice |
+| `/terms` | Terms & conditions |
+| `/cookies` | Cookie policy |
 
 ## Deploy (Vercel)
 
@@ -59,7 +63,7 @@ Open [http://localhost:3000](http://localhost:3000).
 2. Add the same env vars.
 3. Set `NEXT_PUBLIC_APP_URL` to your production URL.
 4. Point Stripe webhook to `https://your-domain/api/webhooks/stripe`.
-5. Optional domains: `woo.co`, `getwoo.com`.
+5. Domain: `getwoo.app`.
 
 ## Monetization
 

@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Lock, Mail } from "lucide-react";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { Logo, UpgradeModal } from "@/components/ui";
-import { ACTIVITIES, formatActivityLabel } from "@/lib/activities";
+import { formatActivityLabel } from "@/lib/activities";
+import { useI18n } from "@/lib/i18n/provider";
 import {
   minPlanForThemeIndex,
-  PLAN_LIMITS,
   readStoredPlan,
   themeAllowedForPlan,
   writeStoredPlan,
@@ -19,6 +20,7 @@ import { DRAFT_STORAGE_KEY, type CreateDraft } from "@/lib/types";
 
 export default function CreateStep2() {
   const router = useRouter();
+  const { t, locale } = useI18n();
   const [draft, setDraft] = useState<CreateDraft | null>(null);
   const [senderName, setSenderName] = useState("");
   const [senderEmail, setSenderEmail] = useState("");
@@ -61,11 +63,11 @@ export default function CreateStep2() {
     if (!draft) return;
     setError("");
     if (!senderName.trim() || !senderEmail.trim()) {
-      setError("Add your name and email so they know who Woo'd them.");
+      setError(t.create2.errSender);
       return;
     }
     if (!recipientName.trim() || !recipientEmail.trim()) {
-      setError("Add the recipient's name and email.");
+      setError(t.create2.errRecipient);
       return;
     }
 
@@ -113,6 +115,8 @@ export default function CreateStep2() {
 
       const sendRes = await fetch(`/api/woos/${createData.woo.id}/send`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ send_token: createData.send_token }),
       });
       const sendData = await sendRes.json();
       if (!sendRes.ok) {
@@ -135,66 +139,69 @@ export default function CreateStep2() {
   if (!draft) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-woo-gradient">
-        <p className="text-woo-muted">Loading…</p>
+        <p className="text-woo-muted">{t.common.loading}</p>
       </div>
     );
   }
 
   const planSummary =
     draft.activityMode === "fixed"
-      ? formatActivityLabel(draft.plan)
+      ? formatActivityLabel(draft.plan, locale)
       : draft.proposedActivities
-          .map((k) => {
-            const a = ACTIVITIES.find((x) => x.key === k);
-            return a ? `${a.emoji} ${a.label}` : k;
-          })
+          .map((k) => formatActivityLabel(k, locale))
           .join(" · ");
 
   return (
-    <div className="min-h-screen bg-woo-gradient px-4 py-8 pb-32">
-      <div className="mx-auto max-w-md">
-        <div className="mb-8 flex items-center justify-between">
-          <Logo />
-          <span className="woo-label">Step 2 of 2</span>
+    <div className="min-h-screen overflow-x-hidden bg-woo-gradient px-4 py-6 pb-36 pt-[max(1.5rem,env(safe-area-inset-top))] sm:py-8 sm:pb-32">
+      <div className="mx-auto w-full max-w-md">
+        <div className="mb-6 flex items-center justify-between gap-3 sm:mb-8">
+          <Logo className="text-2xl sm:text-3xl" />
+          <div className="flex items-center gap-2">
+            <LanguageSwitcher variant="soft" />
+            <span className="woo-label shrink-0">{t.create2.step}</span>
+          </div>
         </div>
 
-        <div className="woo-card p-6 sm:p-8">
+        <div className="woo-card p-5 sm:p-8">
           <div className="woo-badge-icon mb-5">
             <Mail className="h-5 w-5 text-woo-accent" />
           </div>
 
-          <h1 className="font-serif text-3xl font-bold text-woo-text sm:text-4xl">
-            Who are you wooing?
+          <h1 className="font-serif text-[1.75rem] font-bold leading-tight text-woo-text sm:text-4xl">
+            {t.create2.title}
           </h1>
-          <p className="mt-2 text-woo-muted">
-            We&apos;ll send them a beautiful link by email.
+          <p className="mt-2 text-sm text-woo-muted sm:text-base">
+            {t.create2.subtitle}
           </p>
 
           <div className="mt-8 space-y-5">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
-                <label className="woo-label mb-2 block">Your name</label>
+                <label className="woo-label mb-2 block">{t.create2.yourName}</label>
                 <input
                   className="woo-input"
                   value={senderName}
                   onChange={(e) => setSenderName(e.target.value)}
                   placeholder="Camille"
+                  autoComplete="name"
                 />
               </div>
               <div>
-                <label className="woo-label mb-2 block">Your email</label>
+                <label className="woo-label mb-2 block">{t.create2.yourEmail}</label>
                 <input
                   type="email"
                   className="woo-input"
                   value={senderEmail}
                   onChange={(e) => setSenderEmail(e.target.value)}
                   placeholder="you@email.com"
+                  autoComplete="email"
+                  inputMode="email"
                 />
               </div>
             </div>
 
             <div>
-              <label className="woo-label mb-2 block">Recipient name</label>
+              <label className="woo-label mb-2 block">{t.create2.recipientName}</label>
               <input
                 className="woo-input"
                 value={recipientName}
@@ -204,46 +211,50 @@ export default function CreateStep2() {
             </div>
 
             <div>
-              <label className="woo-label mb-2 block">Recipient email</label>
+              <label className="woo-label mb-2 block">{t.create2.recipientEmail}</label>
               <input
                 type="email"
                 className="woo-input"
                 value={recipientEmail}
                 onChange={(e) => setRecipientEmail(e.target.value)}
                 placeholder="alex@email.com"
+                autoComplete="email"
+                inputMode="email"
               />
             </div>
 
             <div>
-              <label className="woo-label mb-2 block">Personal message</label>
+              <label className="woo-label mb-2 block">{t.create2.message}</label>
               <textarea
                 className="woo-input min-h-[100px] resize-none"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder="Add a little something…"
+                placeholder={t.create2.messagePlaceholder}
               />
             </div>
 
             <div>
-              <label className="woo-label mb-2 block">Visual theme</label>
-              <div className="grid grid-cols-3 gap-2">
-                {THEMES.map((t, index) => {
+              <label className="woo-label mb-2 block">{t.create2.theme}</label>
+              <div className="grid grid-cols-2 gap-2 min-[420px]:grid-cols-3">
+                {THEMES.map((th, index) => {
                   const allowed = themeAllowedForPlan(index, userPlan);
                   const required = minPlanForThemeIndex(index);
-                  const selected = theme === t.key;
+                  const selected = theme === th.key;
+                  const themeLabel =
+                    t.themes[th.key as keyof typeof t.themes] ?? th.label;
                   return (
                     <button
-                      key={t.key}
+                      key={th.key}
                       type="button"
                       onClick={() => {
                         if (!allowed) {
                           openUpgrade(
                             required === "free" ? "woo_plus" : (required as PaidTier),
-                            "This theme"
+                            t.create2.theme
                           );
                           return;
                         }
-                        setTheme(t.key);
+                        setTheme(th.key);
                       }}
                       className={`relative overflow-hidden rounded-2xl border-2 p-1 transition ${
                         selected ? "border-woo-accent" : "border-transparent"
@@ -251,16 +262,16 @@ export default function CreateStep2() {
                     >
                       <div
                         className="aspect-square rounded-xl"
-                        style={{ background: t.preview }}
+                        style={{ background: th.preview }}
                       />
                       <p className="mt-1 truncate text-center text-[10px] text-woo-muted">
-                        {t.label}
+                        {themeLabel}
                       </p>
                       {!allowed && (
                         <span className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 rounded-2xl bg-white/55">
                           <Lock className="h-3.5 w-3.5 text-woo-text" />
                           <span className="text-[9px] font-medium uppercase tracking-wide text-woo-accent">
-                            {PLAN_LIMITS[required].label}
+                            {t.plans[required as keyof typeof t.plans]}
                           </span>
                         </span>
                       )}
@@ -271,7 +282,7 @@ export default function CreateStep2() {
             </div>
 
             <div className="rounded-2xl bg-woo-accent-soft/60 p-4 text-sm text-woo-text">
-              <p className="woo-label mb-2">Recap</p>
+              <p className="woo-label mb-2">{t.create2.recap}</p>
               <p>
                 <strong>{draft.date}</strong> at <strong>{draft.time}</strong>
               </p>
@@ -285,7 +296,7 @@ export default function CreateStep2() {
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 border-t border-black/5 bg-white/80 p-4 backdrop-blur-md">
+      <div className="woo-bottom-bar">
         <div className="mx-auto max-w-md">
           <button
             type="button"
@@ -293,7 +304,7 @@ export default function CreateStep2() {
             disabled={loading}
             onClick={sendWoo}
           >
-            {loading ? "Sending…" : "Send your Woo 💌"}
+            {loading ? t.create2.sending : t.create2.send}
           </button>
         </div>
       </div>

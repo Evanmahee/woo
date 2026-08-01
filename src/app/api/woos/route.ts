@@ -2,67 +2,45 @@ import { NextRequest, NextResponse } from "next/server";
 import { ACTIVITIES } from "@/lib/activities";
 import { canSendWoo, incrementWooCount } from "@/lib/billing";
 import { PLAN_LIMITS, themeAllowedForPlan } from "@/lib/plans";
+import {
+  clientIp,
+  publicError,
+  rateLimit,
+  rateLimitedResponse,
+  signPayload,
+} from "@/lib/security";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { getThemeIndex, THEMES } from "@/lib/themes";
+import { createWooSchema, zodErrorMessage } from "@/lib/validation";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const {
-      sender_name,
-      sender_email,
-      recipient_name,
-      recipient_email,
-      date,
-      time,
-      activity_mode = "fixed",
-      plan,
-      proposed_activities,
-      custom_message,
-      theme = "default",
-    } = body;
+    const ip = clientIp(req);
+    const rl = rateLimit(`woos:create:${ip}`, 10, 60_000);
+    if (!rl.ok) return rateLimitedResponse(rl.retryAfterSec);
 
-    if (
-      !sender_name ||
-      !sender_email ||
-      !recipient_name ||
-      !recipient_email ||
-      !date ||
-      !time
-    ) {
+    const raw = await req.json().catch(() => null);
+    const parsed = createWooSchema.safeParse(raw);
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { error: zodErrorMessage(parsed.error) },
         { status: 400 }
       );
     }
 
-    if (!["fixed", "recipient_choice"].includes(activity_mode)) {
-      return NextResponse.json({ error: "Invalid activity_mode" }, { status: 400 });
-    }
+    const body = parsed.data;
+    const emailRl = rateLimit(
+      `woos:create:email:${body.sender_email}`,
+      8,
+      60 * 60_000
+    );
+    if (!emailRl.ok) return rateLimitedResponse(emailRl.retryAfterSec);
 
-    if (activity_mode === "fixed") {
-      if (!plan || !ACTIVITIES.some((a) => a.key === plan)) {
-        return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
-      }
-    } else {
-      if (
-        !Array.isArray(proposed_activities) ||
-        proposed_activities.length < 2 ||
-        proposed_activities.length > 5 ||
-        !proposed_activities.every((k: string) =>
-          ACTIVITIES.some((a) => a.key === k)
-        )
-      ) {
-        return NextResponse.json(
-          { error: "proposed_activities must be 2–5 valid activity keys" },
-          { status: 400 }
-        );
-      }
-    }
-
-    const themeMeta = THEMES.find((t) => t.key === theme) ?? THEMES[0];
+    const themeMeta = THEMES.find((t) => t.key === body.theme) ?? THEMES[0];
     const themeIndex = getThemeIndex(themeMeta.key);
-    const { allowed, plan: userPlan, billing } = await canSendWoo(sender_email);
+    const { allowed, plan: userPlan } = await canSendWoo(
+      body.sender_email
+    );
     const limits = PLAN_LIMITS[userPlan];
 
     if (!allowed) {
@@ -80,7 +58,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (activity_mode === "recipient_choice" && !limits.recipientChoice) {
+    if (body.activity_mode === "recipient_choice" && !limits.recipientChoice) {
       return NextResponse.json(
         {
           error: '"Let them pick" requires Woo+ or Woo Pro',
@@ -105,9 +83,9 @@ export async function POST(req: NextRequest) {
     }
 
     const usesSurprise =
-      plan === "surprise" ||
-      (Array.isArray(proposed_activities) &&
-        proposed_activities.includes("surprise"));
+      body.plan === "surprise" ||
+      (Array.isArray(body.proposed_activities) &&
+        body.proposed_activities.includes("surprise"));
     if (usesSurprise && !limits.surpriseDate) {
       return NextResponse.json(
         {
@@ -119,45 +97,58 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Validate activity keys still exist (defense in depth)
+    if (
+      body.activity_mode === "fixed" &&
+      !ACTIVITIES.some((a) => a.key === body.plan)
+    ) {
+      return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
+    }
+
     const supabase = getSupabaseAdmin();
     const { data: woo, error } = await supabase
       .from("woos")
       .insert({
-        sender_name: String(sender_name).trim(),
-        sender_email: String(sender_email).trim().toLowerCase(),
-        recipient_name: String(recipient_name).trim(),
-        recipient_email: String(recipient_email).trim().toLowerCase(),
-        date,
-        time,
-        activity_mode,
-        plan: activity_mode === "fixed" ? plan : null,
+        sender_name: body.sender_name,
+        sender_email: body.sender_email,
+        recipient_name: body.recipient_name,
+        recipient_email: body.recipient_email,
+        date: body.date,
+        time: body.time,
+        activity_mode: body.activity_mode,
+        plan: body.activity_mode === "fixed" ? body.plan : null,
         proposed_activities:
-          activity_mode === "recipient_choice" ? proposed_activities : null,
-        custom_message: custom_message ? String(custom_message).trim() : null,
+          body.activity_mode === "recipient_choice"
+            ? body.proposed_activities
+            : null,
+        custom_message: body.custom_message || null,
         theme: themeMeta.key,
         status: "pending",
       })
-      .select("*")
+      .select(
+        "id, sender_name, date, time, activity_mode, plan, proposed_activities, custom_message, theme, status, created_at"
+      )
       .single();
 
-    if (error) {
-      console.error(error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error || !woo) {
+      return publicError(500, "Could not create Woo", error);
     }
 
-    await incrementWooCount(sender_email);
+    await incrementWooCount(body.sender_email);
+
+    const send_token = signPayload(
+      "woo_send",
+      { woo_id: woo.id, email: body.sender_email },
+      60 * 60
+    );
 
     return NextResponse.json({
       woo,
+      send_token,
       plan: userPlan,
       is_pro: userPlan === "woo_pro",
-      billing_id: billing.id,
     });
   } catch (e) {
-    console.error(e);
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Server error" },
-      { status: 500 }
-    );
+    return publicError(500, "Server error", e);
   }
 }

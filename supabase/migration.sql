@@ -49,7 +49,8 @@ begin
   end if;
 end $$;
 
--- MVP: RLS disabled (email-based identification, no auth yet)
+# MVP note: RLS was disabled initially. Before public launch run migration_security.sql
+# which enables RLS and revokes anon/authenticated access (service_role only).
 alter table woos disable row level security;
 alter table users_billing disable row level security;
 
