@@ -117,6 +117,18 @@ export async function incrementWooCount(email: string): Promise<void> {
     .eq("id", billing.id);
 }
 
+/** Release a reserved monthly slot when invitation email fails to send. */
+export async function decrementWooCount(email: string): Promise<void> {
+  const billing = await getOrCreateBilling(email);
+  const supabase = getSupabaseAdmin();
+  await supabase
+    .from("users_billing")
+    .update({
+      woos_sent_this_month: Math.max(0, (billing.woos_sent_this_month || 0) - 1),
+    })
+    .eq("id", billing.id);
+}
+
 export async function setUserPlan(opts: {
   email?: string | null;
   stripeCustomerId?: string | null;

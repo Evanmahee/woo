@@ -143,6 +143,8 @@ const en = {
     errSender: "Add your name and email so they know who Woo'd them.",
     errRecipient: "Add the recipient's name and email.",
     errSend: "We couldn't send your Woo. Please try again in a moment.",
+    errSendConfig:
+      "Email couldn’t be sent — Resend isn’t fully set up yet (verify getwoo.app and set RESEND_FROM_EMAIL to hello@getwoo.app).",
   },
   success: {
     welcome: "Welcome to {plan}",
@@ -371,6 +373,8 @@ const fr: Dictionary = {
     errSender: "Ajoute ton prénom et ton email.",
     errRecipient: "Ajoute le prénom et l’email du destinataire.",
     errSend: "Impossible d’envoyer ton Woo. Réessaie dans un instant.",
+    errSendConfig:
+      "Email non envoyé — Resend n’est pas prêt (vérifie le domaine getwoo.app et mets RESEND_FROM_EMAIL sur hello@getwoo.app).",
   },
   success: {
     welcome: "Bienvenue sur {plan}",
@@ -601,6 +605,8 @@ const es: Dictionary = {
     errSender: "Añade tu nombre y email.",
     errRecipient: "Añade el nombre y email del destinatario.",
     errSend: "No pudimos enviar tu Woo. Inténtalo de nuevo en un momento.",
+    errSendConfig:
+      "Email no enviado — Resend no está listo (verifica el dominio getwoo.app y pon RESEND_FROM_EMAIL en hello@getwoo.app).",
   },
   success: {
     welcome: "Bienvenido/a a {plan}",

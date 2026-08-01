@@ -19,6 +19,17 @@ async function sendWithResend(opts: {
   subject: string;
   html: string;
 }): Promise<ResendSendResult> {
+  if (!process.env.RESEND_API_KEY) {
+    console.error("Resend send failed: Missing RESEND_API_KEY");
+    throw new Error("Missing RESEND_API_KEY");
+  }
+
+  if (FROM.includes("resend.dev")) {
+    console.warn(
+      "RESEND_FROM_EMAIL uses resend.dev — Resend only delivers to the account owner's email until a custom domain is verified."
+    );
+  }
+
   const resend = getResend();
   const { data, error } = await resend.emails.send({
     from: FROM,
@@ -28,13 +39,19 @@ async function sendWithResend(opts: {
   });
 
   if (error) {
-    console.error("Resend send failed:", error);
-    throw new Error(error.message || "Failed to send email");
+    console.error("Resend send failed:", {
+      error,
+      from: FROM,
+      toDomain: String(opts.to).split("@")[1] || "unknown",
+    });
+    throw Object.assign(new Error(error.message || "Failed to send email"), {
+      resendError: error,
+    });
   }
 
   const id = data?.id;
   if (!id) {
-    console.error("Resend send returned no email id:", data);
+    console.error("Resend send returned no email id:", { data, from: FROM });
     throw new Error("Failed to send email");
   }
 

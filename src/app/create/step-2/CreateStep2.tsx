@@ -121,7 +121,11 @@ export default function CreateStep2() {
       const sendData = await sendRes.json().catch(() => ({}));
       if (!sendRes.ok) {
         console.error("Woo send failed:", sendRes.status, sendData);
-        throw new Error(t.create2.errSend);
+        throw new Error(
+          sendData.code === "RESEND_CONFIG"
+            ? t.create2.errSendConfig
+            : t.create2.errSend
+        );
       }
 
       sessionStorage.removeItem(DRAFT_STORAGE_KEY);

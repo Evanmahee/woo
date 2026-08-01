@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { decrementWooCount } from "@/lib/billing";
 import { sendWooInvitation } from "@/lib/email";
 import {
   clientIp,
@@ -10,6 +11,20 @@ import {
 import { getSupabaseAdmin } from "@/lib/supabase";
 import type { Woo } from "@/lib/types";
 import { sendWooSchema, zodErrorMessage } from "@/lib/validation";
+
+function isResendConfigError(err: unknown): boolean {
+  const msg = String(
+    err instanceof Error ? err.message : (err as { message?: string })?.message || err
+  ).toLowerCase();
+  return (
+    msg.includes("resend.dev") ||
+    msg.includes("only send testing") ||
+    msg.includes("own email") ||
+    msg.includes("not verified") ||
+    msg.includes("invalid from") ||
+    msg.includes("domain is not verified")
+  );
+}
 
 export async function POST(
   req: NextRequest,
@@ -48,15 +63,16 @@ export async function POST(
       return NextResponse.json({ error: "Woo not found" }, { status: 404 });
     }
 
+    const row = woo as Woo;
     if (
-      String((woo as Woo).sender_email).toLowerCase() !==
+      String(row.sender_email).toLowerCase() !==
       String(claims.email).toLowerCase()
     ) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     try {
-      const result = await sendWooInvitation(woo as Woo);
+      const result = await sendWooInvitation(row);
       return NextResponse.json({
         success: true,
         ok: true,
@@ -64,9 +80,21 @@ export async function POST(
       });
     } catch (sendErr) {
       console.error("Resend send failed:", sendErr);
+      // Free the monthly quota reserved at create-time
+      try {
+        await decrementWooCount(row.sender_email);
+      } catch (quotaErr) {
+        console.error("Failed to release Woo quota after send error:", quotaErr);
+      }
+
+      const configIssue =
+        isResendConfigError(sendErr) ||
+        String(process.env.RESEND_FROM_EMAIL || "").includes("resend.dev");
+
       return NextResponse.json(
         {
           success: false,
+          code: configIssue ? "RESEND_CONFIG" : "RESEND_FAILED",
           error: "Failed to send invitation email",
         },
         { status: 502 }
