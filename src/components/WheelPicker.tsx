@@ -1,13 +1,8 @@
 "use client";
 
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
-/** Matches iOS UIPicker row height feel */
+/** iOS UIPicker-like row height */
 export const WHEEL_ITEM_H = 40;
 const VISIBLE = 5;
 const PAD = Math.floor(VISIBLE / 2);
@@ -22,44 +17,23 @@ type WheelColumnProps = {
   className?: string;
 };
 
-let scrollLocks = 0;
-let lockedScrollY = 0;
-
-function lockPageScroll() {
-  if (typeof document === "undefined") return;
-  if (scrollLocks === 0) {
-    lockedScrollY = window.scrollY;
-    const body = document.body;
-    body.dataset.wooScrollLock = "1";
-    body.style.position = "fixed";
-    body.style.top = `-${lockedScrollY}px`;
-    body.style.left = "0";
-    body.style.right = "0";
-    body.style.width = "100%";
-    body.style.overflow = "hidden";
-  }
-  scrollLocks += 1;
+function indexOfValue(items: number[], value: number) {
+  const i = items.indexOf(value);
+  return i >= 0 ? i : 0;
 }
 
-function unlockPageScroll() {
-  if (typeof document === "undefined") return;
-  scrollLocks = Math.max(0, scrollLocks - 1);
-  if (scrollLocks > 0) return;
-  const body = document.body;
-  if (body.dataset.wooScrollLock !== "1") return;
-  delete body.dataset.wooScrollLock;
-  body.style.position = "";
-  body.style.top = "";
-  body.style.left = "";
-  body.style.right = "";
-  body.style.width = "";
-  body.style.overflow = "";
-  window.scrollTo(0, lockedScrollY);
+function paintActive(scroller: HTMLElement, index: number) {
+  const nodes = scroller.querySelectorAll<HTMLElement>("[data-wheel-item]");
+  nodes.forEach((node, i) => {
+    const on = i === index;
+    node.classList.toggle("is-active", on);
+    node.setAttribute("aria-selected", on ? "true" : "false");
+  });
 }
 
 /**
- * iOS-style picker column: native momentum scroll + scroll-snap.
- * Page scroll is locked while the finger is on the wheel shell.
+ * Native momentum picker (real overflow scroll).
+ * No body scroll-lock — that freezes iOS. No React state during drag.
  */
 export function WheelColumn({
   items,
@@ -73,9 +47,9 @@ export function WheelColumn({
   const valueRef = useRef(value);
   const itemsRef = useRef(items);
   const onChangeRef = useRef(onChange);
-  const ignoreScroll = useRef(false);
+  const touchingRef = useRef(false);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [active, setActive] = useState(value);
+  const ignoreSync = useRef(false);
 
   useEffect(() => {
     valueRef.current = value;
@@ -83,134 +57,125 @@ export function WheelColumn({
     onChangeRef.current = onChange;
   }, [value, items, onChange]);
 
-  const indexOf = (n: number) => {
-    const i = items.indexOf(n);
-    return i >= 0 ? i : 0;
-  };
-
-  // Jump to controlled value (no smooth — avoids fighting momentum)
+  // Sync from controlled value only when the user isn't interacting
   useEffect(() => {
     const el = scrollerRef.current;
-    if (!el) return;
-    const i = indexOf(value);
+    if (!el || touchingRef.current) return;
+    const i = indexOfValue(items, value);
     const top = i * WHEEL_ITEM_H;
-    if (Math.abs(el.scrollTop - top) < 1.5) {
-      setActive(value);
-      return;
+    if (Math.abs(el.scrollTop - top) > 1) {
+      ignoreSync.current = true;
+      el.scrollTop = top;
+      requestAnimationFrame(() => {
+        ignoreSync.current = false;
+      });
     }
-    ignoreScroll.current = true;
-    el.scrollTop = top;
-    setActive(value);
-    const t = window.setTimeout(() => {
-      ignoreScroll.current = false;
-    }, 40);
-    return () => window.clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync on value/items only
+    paintActive(el, i);
   }, [value, items]);
 
-  function commitFromScroll() {
-    const el = scrollerRef.current;
-    if (!el) return;
-    const list = itemsRef.current;
-    const i = Math.max(
-      0,
-      Math.min(list.length - 1, Math.round(el.scrollTop / WHEEL_ITEM_H))
-    );
-    // Hard snap if browser left us between ticks
-    const top = i * WHEEL_ITEM_H;
-    if (Math.abs(el.scrollTop - top) > 0.5) {
-      ignoreScroll.current = true;
-      el.scrollTo({ top, behavior: "smooth" });
-      window.setTimeout(() => {
-        ignoreScroll.current = false;
-      }, 220);
-    }
-    const next = list[i];
-    setActive(next);
-    if (next !== undefined && next !== valueRef.current) {
-      onChangeRef.current(next);
-    }
-  }
-
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
 
-    const onScroll = () => {
-      if (ignoreScroll.current) return;
+    // Initial position
+    const i0 = indexOfValue(itemsRef.current, valueRef.current);
+    el.scrollTop = i0 * WHEEL_ITEM_H;
+    paintActive(el, i0);
+
+    const settle = () => {
       const list = itemsRef.current;
       const i = Math.max(
         0,
         Math.min(list.length - 1, Math.round(el.scrollTop / WHEEL_ITEM_H))
       );
-      setActive(list[i]);
+      const top = i * WHEEL_ITEM_H;
+      if (Math.abs(el.scrollTop - top) > 1) {
+        el.scrollTo({ top, behavior: "smooth" });
+      }
+      paintActive(el, i);
+      const next = list[i];
+      if (next !== undefined && next !== valueRef.current) {
+        onChangeRef.current(next);
+      }
+    };
+
+    const onScroll = () => {
+      if (ignoreSync.current) return;
+      const list = itemsRef.current;
+      const i = Math.max(
+        0,
+        Math.min(list.length - 1, Math.round(el.scrollTop / WHEEL_ITEM_H))
+      );
+      paintActive(el, i);
       if (settleTimer.current) clearTimeout(settleTimer.current);
-      settleTimer.current = setTimeout(commitFromScroll, 120);
+      settleTimer.current = setTimeout(() => {
+        if (!touchingRef.current) settle();
+      }, 140);
     };
 
     const onScrollEnd = () => {
       if (settleTimer.current) clearTimeout(settleTimer.current);
-      commitFromScroll();
+      settle();
+    };
+
+    const onTouchStart = () => {
+      touchingRef.current = true;
+      if (settleTimer.current) clearTimeout(settleTimer.current);
+    };
+
+    const onTouchEnd = () => {
+      touchingRef.current = false;
+      if (settleTimer.current) clearTimeout(settleTimer.current);
+      settleTimer.current = setTimeout(settle, 160);
     };
 
     el.addEventListener("scroll", onScroll, { passive: true });
-    el.addEventListener("scrollend", onScrollEnd);
+    el.addEventListener("scrollend", onScrollEnd as EventListener);
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchend", onTouchEnd, { passive: true });
+    el.addEventListener("touchcancel", onTouchEnd, { passive: true });
+
     return () => {
       el.removeEventListener("scroll", onScroll);
-      el.removeEventListener("scrollend", onScrollEnd);
+      el.removeEventListener("scrollend", onScrollEnd as EventListener);
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchcancel", onTouchEnd);
       if (settleTimer.current) clearTimeout(settleTimer.current);
     };
   }, []);
 
   return (
     <div
-      className={`relative overflow-hidden ${className}`}
+      className={`relative min-w-0 overflow-hidden ${className}`}
       style={{ height: WHEEL_HEIGHT }}
       role="listbox"
       aria-label={ariaLabel}
-      aria-activedescendant={`${ariaLabel}-${active}`}
     >
       <div
         ref={scrollerRef}
-        className="ios-wheel h-full w-full overflow-y-auto overscroll-y-contain"
+        className="ios-wheel h-full w-full overflow-y-auto"
       >
         <div style={{ height: PAD * WHEEL_ITEM_H }} aria-hidden />
-        {items.map((n) => {
-          const selected = n === active;
-          const dist = Math.min(
-            3,
-            Math.abs(items.indexOf(n) - items.indexOf(active))
-          );
-          const opacity = selected ? 1 : Math.max(0.22, 1 - dist * 0.28);
-          return (
-            <div
-              key={n}
-              id={`${ariaLabel}-${n}`}
-              role="option"
-              aria-selected={selected}
-              onClick={() => {
-                const el = scrollerRef.current;
-                const i = indexOf(n);
-                if (!el) return;
-                el.scrollTo({ top: i * WHEEL_ITEM_H, behavior: "smooth" });
-                setActive(n);
-                if (n !== valueRef.current) onChange(n);
-              }}
-              className="ios-wheel-item flex w-full shrink-0 items-center justify-center px-0.5 tabular-nums"
-              style={{
-                height: WHEEL_ITEM_H,
-                opacity,
-                fontSize: selected ? "1.375rem" : "1.0625rem",
-                fontWeight: selected ? 600 : 400,
-                color: selected ? "#3D1F2B" : "#8A7A85",
-                transition:
-                  "opacity 120ms ease, font-size 120ms ease, color 120ms ease",
-              }}
-            >
-              {formatLabel(n)}
-            </div>
-          );
-        })}
+        {items.map((n) => (
+          <div
+            key={n}
+            data-wheel-item
+            role="option"
+            aria-selected={n === value}
+            className="ios-wheel-item"
+            onClick={() => {
+              const el = scrollerRef.current;
+              if (!el) return;
+              const i = indexOfValue(items, n);
+              el.scrollTo({ top: i * WHEEL_ITEM_H, behavior: "smooth" });
+              paintActive(el, i);
+              if (n !== valueRef.current) onChange(n);
+            }}
+          >
+            {formatLabel(n)}
+          </div>
+        ))}
         <div style={{ height: PAD * WHEEL_ITEM_H }} aria-hidden />
       </div>
     </div>
@@ -224,52 +189,19 @@ export function WheelShell({
   children: ReactNode;
   footer: ReactNode;
 }) {
-  const shellRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = shellRef.current;
-    if (!el) return;
-
-    const onStart = () => lockPageScroll();
-    const onEnd = () => unlockPageScroll();
-
-    el.addEventListener("touchstart", onStart, { passive: true });
-    el.addEventListener("touchend", onEnd, { passive: true });
-    el.addEventListener("touchcancel", onEnd, { passive: true });
-
-    return () => {
-      el.removeEventListener("touchstart", onStart);
-      el.removeEventListener("touchend", onEnd);
-      el.removeEventListener("touchcancel", onEnd);
-      while (scrollLocks > 0) unlockPageScroll();
-    };
-  }, []);
-
   return (
-    <div
-      ref={shellRef}
-      className="ios-picker overflow-hidden rounded-2xl border border-black/5 bg-[#F7F2F0] shadow-inner [contain:layout]"
-    >
+    <div className="ios-picker overflow-hidden rounded-2xl border border-black/5 bg-[#F7F2F0] shadow-inner">
       <div
         className="relative flex items-stretch px-1"
         style={{ height: WHEEL_HEIGHT }}
       >
-        {/* iOS selection indicator */}
         <div
           aria-hidden
           className="pointer-events-none absolute inset-x-2 top-1/2 z-10 -translate-y-1/2 rounded-[8px] bg-black/[0.06]"
           style={{ height: WHEEL_ITEM_H }}
         />
-        {/* Soft fade like UIPickerView */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 z-20"
-          style={{
-            background:
-              "linear-gradient(to bottom, rgba(247,242,240,0.96) 0%, rgba(247,242,240,0.55) 18%, transparent 36%, transparent 64%, rgba(247,242,240,0.55) 82%, rgba(247,242,240,0.96) 100%)",
-          }}
-        />
-        <div className="relative z-[5] flex w-full items-stretch">
+        <div aria-hidden className="ios-picker-fade pointer-events-none absolute inset-0 z-20" />
+        <div className="relative z-[1] flex w-full min-w-0 items-stretch">
           {children}
         </div>
       </div>
