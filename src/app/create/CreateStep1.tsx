@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarHeart, Clock, Lock } from "lucide-react";
+import { CalendarHeart, Lock } from "lucide-react";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { TimeCarousel } from "@/components/TimeCarousel";
 import { Logo, UpgradeModal } from "@/components/ui";
 import { ActivityCheckboxGrid, PlanDropdown } from "@/components/ActivityPicker";
 import type { ActivityKey } from "@/lib/activities";
@@ -121,15 +122,7 @@ export default function CreateStep1() {
 
             <div>
               <label className="woo-label mb-2 block">{t.create1.time}</label>
-              <div className="relative">
-                <input
-                  type="time"
-                  value={time}
-                  onChange={(e) => setTime(e.target.value)}
-                  className="woo-input pr-12"
-                />
-                <Clock className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-woo-muted" />
-              </div>
+              <TimeCarousel value={time} onChange={setTime} />
             </div>
 
             <div>

@@ -124,6 +124,14 @@ svg {
   height: auto;
 }
 
+.time-wheel {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.time-wheel::-webkit-scrollbar {
+  display: none;
+}
+
 /* Hide iOS Safari native video chrome / play overlay on background hero */
 .hero-video {
   max-width: none;
